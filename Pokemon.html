@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寶可夢搜尋器</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+
+        .search-box {
+            margin-bottom: 20px;
+        }
+
+        #searchInput {
+            padding: 8px 12px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 250px;
+        }
+
+        #searchBtn {
+            padding: 8px 16px;
+            font-size: 16px;
+            background-color: #ffcb05;
+            color: #3b4cca;
+            font-weight: bold;
+            border: 2px solid #3b4cca;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        #searchBtn:hover {
+            background-color: #3b4cca;
+            color: #ffcb05;
+        }
+
+        .card {
+            border: 1px solid #ccc;
+            padding: 20px;
+            border-radius: 8px;
+            width: 250px;
+            margin: 0 auto;
+            box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+        }
+
+        .error {
+            color: red;
+            font-weight: bold;
+        }
+
+        .type {
+            display: inline-block;
+            background: #f0f0f0;
+            padding: 5px 10px;
+            margin: 5px;
+            border-radius: 4px;
+            text-transform: capitalize;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>PokeAPI 寶可夢查詢</h1>
+
+    <div class="search-box">
+        <input type="text" id="searchInput" placeholder="輸入寶可夢名稱或編號 (例如: pikachu 或 25)">
+        <button id="searchBtn">搜尋</button>
+    </div>
+
+    <div id="resultContainer"></div>
+
+    <script>
+        // 綁定 DOM 元素
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const resultContainer = document.getElementById('resultContainer');
+
+        // 監聽按鈕點擊事件
+        searchBtn.addEventListener('click', () => {
+            const keyword = searchInput.value.trim().toLowerCase(); // 轉小寫以符合 API 要求
+            if (keyword) {
+                getPokemonData(keyword);
+            }
+        });
+
+        // 讓使用者按 Enter 鍵也能觸發搜尋
+        searchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                const keyword = searchInput.value.trim().toLowerCase();
+                if (keyword) {
+                    getPokemonData(keyword);
+                }
+            }
+        });
+
+        // 使用 async/await 與 try/catch 處理非同步請求
+        async function getPokemonData(pokemon) {
+            // 每次搜尋前先清空畫面，並顯示載入中
+            resultContainer.innerHTML = '<p>載入中...</p>';
+
+            try {
+                const response = await fetch(`https://pokeapi.co/api/v2/pokemon/${pokemon}`);
+
+                // 如果找不到該寶可夢 (404)，fetch 不會跳到 catch，必須手動檢查 response.ok
+                if (!response.ok) {
+                    throw new Error('找不到這隻寶可夢，請檢查名稱或編號是否正確！');
+                }
+
+                const data = await response.json();
+
+                // 渲染資料到網頁上
+                renderPokemon(data);
+
+            } catch (error) {
+                // 錯誤處理：顯示錯誤訊息給使用者
+                resultContainer.innerHTML = `<p class="error">⚠️ 發生錯誤: ${error.message}</p>`;
+            }
+        }
+
+        // 渲染網頁的函式
+        function renderPokemon(data) {
+            const name = data.name.toUpperCase();
+            const id = data.id;
+            const imageUrl = data.sprites.front_default; // 取得正面圖片
+
+            // 處理多個屬性 (types)
+            const typesHtml = data.types
+                .map(t => `<span class="type">${t.type.name}</span>`)
+                .join('');
+
+            // 產生 HTML 字串並塞入容器
+            resultContainer.innerHTML = `
+                <div class="card">
+                    <h2>#${id} ${name}</h2>
+                    <img src="${imageUrl}" alt="${name}" width="150">
+                    <div><strong>屬性:</strong> ${typesHtml}</div>
+                </div>
+            `;
+        }
+
+        // 預設載入：頁面一打開時先顯示皮卡丘
+        getPokemonData('pikachu');
+    </script>
+</body>
+
+</html>
