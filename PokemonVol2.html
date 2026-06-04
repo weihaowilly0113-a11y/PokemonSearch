@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>寶可夢高級搜尋圖鑑 - 極簡極致版</title>
+    <style>
+        /* 官方屬性顏色對照表 */
+        :root {
+            --normal: #A8A77A; --fire: #FF4216; --water: #4A85FF; --electric: #F3D23B;
+            --grass: #62C135; --ice: #76D1CD; --fighting: #E63D35; --poison: #B844B6;
+            --ground: #E9C35F; --flying: #9B79F7; --psychic: #FF4A81; --bug: #99B20D;
+            --rock: #C9B23F; --ghost: #8465AB; --dragon: #5516FF; --dark: #5C4435;
+            --steel: #A1A1BE; --fairy: #E073A6;
+        }
+
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding-top: 240px; /* 預留上方固定面板的高度 */
+        }
+
+        /* 智能滾動控制面板 */
+        .header-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 1000;
+            padding: 20px 0 15px 0;
+            transition: transform 0.3s ease-in-out;
+            transform: translateY(0); 
+        }
+
+        .header-panel.hide {
+            transform: translateY(-100%);
+        }
+
+        /* 控制面板與下方網格統一的最大寬度與置中限制，大幅減少兩側留白 */
+        .panel-container, .grid-container {
+            max-width: 95%; /* 放大內容佔比，拉近與螢幕邊緣的距離 */
+            margin: 0 auto;
+            box-sizing: border-box;
+        }
+
+        /* 頂部元件靠左對齊 */
+        .top-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 24px;
+            margin-bottom: 20px;
+            padding-left: 10px;
+        }
+
+        h1 { margin: 0; font-size: 24px; color: #ffffff; white-space: nowrap; }
+        .search-box { display: flex; align-items: center; }
+
+        #searchInput {
+            padding: 8px 16px;
+            font-size: 14px;
+            background-color: #2d2d2d;
+            border: 2px solid #444;
+            color: #ffffff;
+            border-radius: 24px;
+            width: 260px;
+            outline: none;
+            transition: border 0.3s, background-color 0.3s;
+        }
+        #searchInput:focus { 
+            border-color: #ffcb05; 
+            background-color: #333;
+        }
+
+        #searchBtn {
+            padding: 8px 20px;
+            font-size: 14px;
+            background-color: #ffcb05;
+            color: #121212;
+            font-weight: bold;
+            border: 2px solid #ffcb05;
+            border-radius: 24px;
+            cursor: pointer;
+            margin-left: 8px;
+            transition: all 0.2s;
+        }
+        #searchBtn:hover { 
+            background-color: transparent; 
+            color: #ffcb05; 
+        }
+
+        /* 篩選列：一律靠左對齊 */
+        .filter-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            padding-left: 10px;
+        }
+
+        .filter-label {
+            font-size: 14px;
+            font-weight: bold;
+            color: #aaa;
+            width: 60px; /* 固定標籤寬度，確保後方按鈕對齊 */
+            flex-shrink: 0;
+            text-align: left;
+        }
+
+        /* 標籤按鈕群組：使用 Flex 佈局實現等寬填滿 */
+        .filter-group {
+            display: flex;
+            flex-grow: 1; /* 讓整個群組延伸填滿右側剩餘的所有空間 */
+            gap: 8px;
+        }
+
+        /* 基礎標籤樣式（世代與屬性共用） */
+        .btn-tag {
+            flex-grow: 1; /* 核心：讓個別標籤自動平均分配、變長，直到上下兩列總長度完全一樣 */
+            flex-basis: 0; /* 確保起始基準點相同，分配才會絕對平均 */
+            padding: 6px 0; /* 改為上下內襯，左右由 flex 自動拉伸 */
+            font-size: 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            border: 1px solid #444;
+            background-color: #2d2d2d;
+            color: #ccc;
+            text-align: center;
+            transition: all 0.25s ease;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        /* 世代與屬性通用的 Hover 與 Active 狀態（預設不顯色） */
+        .btn-tag:hover, .btn-tag.active {
+            background-color: #ffcb05;
+            color: #121212;
+            border-color: #ffcb05;
+            font-weight: bold;
+        }
+
+        /* 屬性標籤特製：只有在 hover 或被選中時，才透過 CSS 變數賦予原本花俏的官方顏色 */
+        .type-tag:hover, .type-tag.active {
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.6);
+            border-color: transparent;
+        }
+        .type-tag.active {
+            transform: scale(1.03);
+            box-shadow: 0 0 10px rgba(255,255,255,0.15);
+        }
+        
+        /* 動態屬性顯色類別（僅在啟用 active 或 hover 時生效） */
+        .t-normal:hover, .t-normal.active { background-color: var(--normal); } 
+        .t-fire:hover, .t-fire.active { background-color: var(--fire); }
+        .t-water:hover, .t-water.active { background-color: var(--water); } 
+        .t-electric:hover, .t-electric.active { background-color: var(--electric); }
+        .t-grass:hover, .t-grass.active { background-color: var(--grass); } 
+        .t-ice:hover, .t-ice.active { background-color: var(--ice); }
+        .t-fighting:hover, .t-fighting.active { background-color: var(--fighting); } 
+        .t-poison:hover, .t-poison.active { background-color: var(--poison); }
+        .t-ground:hover, .t-ground.active { background-color: var(--ground); } 
+        .t-flying:hover, .t-flying.active { background-color: var(--flying); }
+        .t-psychic:hover, .t-psychic.active { background-color: var(--psychic); } 
+        .t-bug:hover, .t-bug.active { background-color: var(--bug); }
+        .t-rock:hover, .t-rock.active { background-color: var(--rock); } 
+        .t-ghost:hover, .t-ghost.active { background-color: var(--ghost); }
+        .t-dragon:hover, .t-dragon.active { background-color: var(--dragon); } 
+        .t-dark:hover, .t-dark.active { background-color: var(--dark); }
+        .t-steel:hover, .t-steel.active { background-color: var(--steel); } 
+        .t-fairy:hover, .t-fairy.active { background-color: var(--fairy); }
+
+        /* 寶可夢卡片網格：減少兩側留白，塞入更多卡片 */
+        .grid-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+            gap: 16px;
+            padding: 20px 10px;
+        }
+
+        /* 卡片本體 */
+        .card {
+            border: 1px solid #2d2d2d;
+            padding: 12px;
+            border-radius: 12px;
+            background-color: #1e1e1e;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            text-align: center;
+            filter: grayscale(100%);
+            opacity: 0.4;
+            transform: scale(0.95);
+        }
+
+        .card:hover, .card.highlight {
+            filter: grayscale(0%);
+            opacity: 1;
+            transform: scale(1.03);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            border-color: #ffcb05;
+        }
+        
+        .card.highlight {
+            outline: 3px solid #4a85ff;
+        }
+
+        .card.hidden { display: none; }
+        .card h3 { font-size: 15px; margin: 8px 0 4px 0; text-transform: capitalize; color: #ffffff; }
+        .card .id-number { font-size: 11px; color: #777; font-weight: bold; }
+
+        .card-types {
+            display: flex;
+            justify-content: center;
+            gap: 4px;
+            margin-top: 6px;
+        }
+        .card-type {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            color: white;
+        }
+        /* 卡片內部的屬性依然保持官方背景色 */
+        .card-type.t-normal { background-color: var(--normal); } .card-type.t-fire { background-color: var(--fire); }
+        .card-type.t-water { background-color: var(--water); } .card-type.t-electric { background-color: var(--electric); }
+        .card-type.t-grass { background-color: var(--grass); } .card-type.t-ice { background-color: var(--ice); }
+        .card-type.t-fighting { background-color: var(--fighting); } .card-type.t-poison { background-color: var(--poison); }
+        .card-type.t-ground { background-color: var(--ground); } .card-type.t-flying { background-color: var(--flying); }
+        .card-type.t-psychic { background-color: var(--psychic); } .card-type.t-bug { background-color: var(--bug); }
+        .card-type.t-rock { background-color: var(--rock); } .card-type.t-ghost { background-color: var(--ghost); }
+        .card-type.t-dragon { background-color: var(--dragon); } .card-type.t-dark { background-color: var(--dark); }
+        .card-type.t-steel { background-color: var(--steel); } .card-type.t-fairy { background-color: var(--fairy); }
+        
+        .error { color: #ff6b6b; font-weight: bold; margin-top: 20px; }
+    </style>
+</head>
+
+<body>
+
+    <div class="header-panel" id="headerPanel">
+        <div class="panel-container">
+            <div class="top-row">
+                <h1>寶可夢全世代圖鑑</h1>
+                <div class="search-box">
+                    <input type="text" id="searchInput" placeholder="輸入名稱或編號 (例如: pikachu 或 25)">
+                    <button id="searchBtn">搜尋定位</button>
+                </div>
+            </div>
+
+            <div class="filter-row">
+                <span class="filter-label">世代</span>
+                <div class="filter-group" id="genGroup">
+                    <button class="btn-tag active" data-gen="all">全部</button>
+                </div>
+            </div>
+
+            <div class="filter-row">
+                <span class="filter-label">屬性</span>
+                <div class="filter-group" id="typeGroup">
+                    <button class="btn-tag active" data-type="all">全部</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="gridContainer" class="grid-container">
+        <p>圖鑑加載中，請稍候...</p>
+    </div>
+
+    <script>
+        const gridContainer = document.getElementById('gridContainer');
+        const searchInput = document.getElementById('searchInput');
+        const searchBtn = document.getElementById('searchBtn');
+        const headerPanel = document.getElementById('headerPanel');
+
+        const typeTranslation = {
+            "normal": "一般", "fire": "火", "water": "水", "electric": "電",
+            "grass": "草", "ice": "冰", "fighting": "格鬥", "poison": "毒",
+            "ground": "地面", "flying": "飛行", "psychic": "超能力", "bug": "蟲",
+            "rock": "岩石", "ghost": "幽靈", "dragon": "龍", "dark": "惡",
+            "steel": "鋼", "fairy": "妖精"
+        };
+
+        const generations = [
+            { id: 1, name: "一世代", start: 1, end: 151 },
+            { id: 2, name: "二世代", start: 152, end: 251 },
+            { id: 3, name: "三世代", start: 252, end: 386 },
+            { id: 4, name: "四世代", start: 387, end: 493 },
+            { id: 5, name: "五世代", start: 494, end: 649 },
+            { id: 6, name: "六世代", start: 650, end: 721 },
+            { id: 7, name: "七世代", start: 722, end: 809 },
+            { id: 8, name: "八世代", start: 810, end: 898 },
+            { id: 9, name: "九世代", start: 899, end: 1025 }
+        ];
+
+        let allPokemons = [];
+        let currentGenFilter = 'all';
+        let currentTypeFilter = 'all';
+        let lastScrollY = window.scrollY;
+
+        function init() {
+            renderFilterButtons();
+            fetchAllPokemons();
+            setupSmartNavbar();
+        }
+
+        function renderFilterButtons() {
+            const genGroup = document.getElementById('genGroup');
+            genGroup.innerHTML = '<button class="btn-tag active" data-gen="all">全部</button>';
+            generations.forEach(g => {
+                genGroup.innerHTML += `<button class="btn-tag" data-gen="${g.id}">${g.name}</button>`;
+            });
+
+            const typeGroup = document.getElementById('typeGroup');
+            typeGroup.innerHTML = '<button class="btn-tag type-tag" data-type="all">全部</button>';
+            Object.keys(typeTranslation).forEach(engType => {
+                const chnType = typeTranslation[engType];
+                typeGroup.innerHTML += `<button class="btn-tag type-tag t-${engType}" data-type="${engType}">${chnType}</button>`;
+            });
+
+            setupFilterListeners();
+        }
+
+        async function fetchAllPokemons() {
+            try {
+                const response = await fetch('https://pokeapi.co/api/v2/pokemon?limit=1025');
+                if (!response.ok) throw new Error('無法取得圖鑑清單');
+                const data = await response.json();
+                
+                allPokemons = data.results.map((p, index) => {
+                    const id = index + 1;
+                    const genObj = generations.find(g => id >= g.start && id <= g.end);
+                    return {
+                        id: id,
+                        name: p.name,
+                        url: p.url,
+                        gen: genObj ? genObj.id : 9,
+                        types: []
+                    };
+                });
+
+                renderGrid();
+            } catch (error) {
+                gridContainer.innerHTML = `<p class="error">⚠️ 載入失敗: ${error.message}</p>`;
+            }
+        }
+
+        function renderGrid() {
+            gridContainer.innerHTML = '';
+            allPokemons.forEach(p => {
+                const imageUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${p.id}.png`;
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.id = `pokemon-card-${p.id}`;
+                card.setAttribute('data-name', p.name);
+                card.setAttribute('data-id', p.id);
+                card.setAttribute('data-gen', p.gen);
+                
+                card.innerHTML = `
+                    <span class="id-number">#${String(p.id).padStart(3, '0')}</span>
+                    <img src="${imageUrl}" alt="${p.name}" width="96" loading="lazy">
+                    <h3>${p.name}</h3>
+                    <div class="card-types" id="card-types-${p.id}">
+                        <span class="card-type" style="background:#444">載入中...</span>
+                    </div>
+                `;
+                gridContainer.appendChild(card);
+                lazyFetchTypes(p.id, p.url);
+            });
+        }
+
+        async function lazyFetchTypes(id, url) {
+            try {
+                const res = await fetch(url);
+                if(!res.ok) return;
+                const data = await res.json();
+                
+                const types = data.types.map(t => t.type.name);
+                const poke = allPokemons.find(p => p.id === id);
+                if(poke) poke.types = types;
+
+                const typeContainer = document.getElementById(`card-types-${id}`);
+                if(typeContainer) {
+                    typeContainer.innerHTML = types.map(t => `
+                        <span class="card-type t-${t}">${typeTranslation[t] || t}</span>
+                    `).join('');
+                }
+                
+                const card = document.getElementById(`pokemon-card-${id}`);
+                card.setAttribute('data-types', types.join(','));
+                applyFilters();
+            } catch (e) {}
+        }
+
+        function setupSmartNavbar() {
+            window.addEventListener('scroll', () => {
+                const currentScrollY = window.scrollY;
+
+                if (currentScrollY > lastScrollY && currentScrollY > 150) {
+                    headerPanel.classList.add('hide');
+                } else if (currentScrollY < lastScrollY) {
+                    headerPanel.classList.remove('hide');
+                }
+                lastScrollY = currentScrollY;
+            });
+        }
+
+        function setupFilterListeners() {
+            document.querySelectorAll('#genGroup .btn-tag').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('#genGroup .btn-tag').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentGenFilter = e.target.getAttribute('data-gen');
+                    applyFilters();
+                });
+            });
+
+            document.querySelectorAll('#typeGroup .btn-tag').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('#typeGroup .btn-tag').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    currentTypeFilter = e.target.getAttribute('data-type');
+                    applyFilters();
+                });
+            });
+
+            searchBtn.addEventListener('click', performSearch);
+            searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') performSearch();
+            });
+        }
+
+        function applyFilters() {
+            const cards = document.querySelectorAll('.card');
+            cards.forEach(card => {
+                const gen = card.getAttribute('data-gen');
+                const typesStr = card.getAttribute('data-types') || '';
+                
+                const matchesGen = (currentGenFilter === 'all' || gen === currentGenFilter);
+                const matchesType = (currentTypeFilter === 'all' || typesStr.split(',').includes(currentTypeFilter));
+
+                if (matchesGen && matchesType) {
+                    card.classList.remove('hidden');
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+        }
+
+        function performSearch() {
+            const keyword = searchInput.value.trim().toLowerCase();
+            if (!keyword) return;
+
+            document.querySelectorAll('.card').forEach(c => c.classList.remove('highlight'));
+            const target = allPokemons.find(p => p.name === keyword || String(p.id) === keyword);
+
+            if (target) {
+                const targetCard = document.getElementById(`pokemon-card-${target.id}`);
+                if (targetCard) {
+                    targetCard.classList.remove('hidden');
+                    headerPanel.classList.remove('hide');
+                    targetCard.classList.add('highlight');
+                    targetCard.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'center'
+                    });
+                }
+            } else {
+                alert('找不到該寶可夢！目前僅支援英文名稱與編號（如 pikachu 或 25）');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
